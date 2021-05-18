@@ -23,6 +23,8 @@ const wax = new WaxWrapper(config);
 
 const bot = new Telegraf(config.botToken);
 
+wax.test('sd');
+
 bot.command('quit', (ctx) => {
     ctx.telegram.leaveChat(ctx.message.chat.id);
 
