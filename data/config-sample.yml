@@ -1,0 +1,13 @@
+#Your Bot's HTTP API token from BotFather
+botToken:
+  1234567890:AABBCCDDEEFFGGHHIIJJKK_1234567890AA
+
+# Your Telegram user identifier for account that bot will try send messages for;
+# You can get it from another bot @get_user_id_bot
+telegramUserId:
+  123456789
+
+# Your WAX accounts to parse. NOTICE you need to specify .wam account name (WAX Wallet)
+accounts:
+  - example1.wam
+  - example2.wam
