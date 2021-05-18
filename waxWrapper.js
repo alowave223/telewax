@@ -21,7 +21,7 @@ const URL = {
     WAX : "https://wax.bloks.io/account/",
     ATOMIC : "https://wax.atomichub.io/profile/",
     ASSETS : 'https://wax.api.atomicassets.io/atomicassets/v1/assets/',
-    RESOURSES : "https://wax.greymass.com/v1/chain/get_account",
+    RESOURCES : "https://wax.greymass.com/v1/chain/get_account",
     GET_PRICE : "https://wax.api.atomicassets.io/atomicmarket/v1/sales",
     GET_WAX_PRICE : 'https://api.coingecko.com/api/v3/coins/wax',
     GET_TLM_PRICE : 'https://api.coingecko.com/api/v3/coins/alien-worlds',
@@ -30,13 +30,182 @@ const URL = {
     COINGECKO_TLM_PAGE : "https://www.coingecko.com/ru/%D0%9A%D1%80%D0%B8%D0%BF%D1%82%D0%BE%D0%B2%D0%B0%D0%BB%D1%8E%D1%82%D1%8B/alien-worlds",
 }
 
+const db = require('./database');
+
 module.exports = class waxWrapper {
     constructor(config) {
-        this.config = config
+        this.config = config;
     }
+
+    URL = URL;
     
-    test(lol) {
-        test1()
-        axios.get()
+    async getTokenPrice(URL) {
+        let response = await axios.get(URL);
+        let data = response.data;
+
+        return [
+            data.market_data.current_price.rub,
+            data.market_data.current_price.usd
+        ];
+    }
+
+    async getAccountTokens(URL) {
+        let response = await axios.get(URL);
+        let data = response.data;
+
+        return data.tokens;
+    }
+
+    async getAccountNfts(URL) {
+        let response = await axios.get(URL, {
+            headers: atomicassetsHeaders,
+            timeout: 10000
+        });
+        let data = response.data;
+
+        return data.data;
+    }
+
+    async getRecources(URL, account) {
+        let response = await axios.get(URL, {
+            data: {
+                account_name: account
+            }
+        });
+        let data = response.data;
+
+        let cpu = parseInt((data.cpu_limit.used / data.cpu_limit.max * 100).toFixed(2));
+        let net = parseInt((data.net_limit.used / data.net_limit.max * 100).toFixed(2));
+        let ram = parseInt((data.ram_usage / data.ram_quota * 100).toFixed(2));
+        let cpu_staked;
+        let ram_bytes;
+        let net_staked;
+        let total_staked;
+
+        if ("total_resources" in data) {
+            cpu_staked = parseFloat(parseFloat(data.total_resources.cpu_weight.substr(0, data.total_resources.cpu_weight.length - 5)).toFixed(2));
+            net_staked = parseFloat(parseFloat(data.total_resources.net_weight.substr(0, data.total_resources.cpu_weight.length - 5)).toFixed(2));
+            ram_bytes = data.total_resources.ram_bytes;
+        } else {
+            cpu_staked = 0;
+            net_staked = 0;
+            ram_bytes = 0;
+        }
+
+        if ("voter_info" in data) {
+            let before = data.voter_info.staked.toString().length <= 9 ? data.voter_info.staked.toString().substr(0, data.voter_info.staked.toString().length - 8) : '0';
+            let after = data.voter_info.staked.toString().substr(data.voter_info.staked.toString().length - 8, data.voter_info.staked.length - 6);
+            total_staked = parseFloat(before + '.' + after);
+            
+        } else {
+            total_staked = 0
+        }
+
+        return {
+            cpu: cpu,
+            net: net,
+            ram: ram,
+            cpu_staked: cpu_staked,
+            ram_bytes: ram_bytes,
+            net_staked: net_staked,
+            total_staked: total_staked
+        }
+
+    }
+
+    async getPrice(template_id) {
+        let response = await axios.get(this.URL.GET_PRICE, {
+            data: {
+                "state":"1",
+                "template_id": template_id.toString(),
+                "order": "asc",
+                "sort": "price",
+                "limit": "1",
+                "symbol": "WAX"
+            },
+            timeout: 10000
+        });
+        let data = response.data.data;
+        let price = data[0].listing_price;
+
+        let before = price.length <= 9 ? price.substr(0, price.length - 8) : '0';
+        let after = price.substr(price.length - 8, price.length - 6);
+
+        return parseFloat(before + '.' + after);
+    }
+
+    async fetchAsset(asset_id) {
+        let indb = db.get_asset(asset_id);
+
+        if (indb.length > 0) {
+            return indb[0];
+        } else {
+            let asset_response = await axios.get(this.URL.ASSETS + asset_id, {
+                headers: atomicassetsHeaders,
+                timeout: 10000
+            });
+            let asset = asset_response.data;
+
+            let collection_name = asset.collection != undefined || asset.collection ? asset.collection.name : "";
+
+            let info = {
+                asset_id: asset_id,
+                contract: asset.contract,
+                collection_name: collection_name,
+                name: asset.name,
+                template_id: asset.template != undefined ? asset.template.template_id : "",
+                rarity: collection_name == 'Alien Worlds' ? asset.data.rarity : ""
+            };
+
+            db.add_asset(
+                info.asset_id,
+                info.name,
+                info.rarity,
+                info.contract,
+                info.collection_name,
+                info.template_id
+            );
+
+            return info;
+        }
+    }
+
+    getAssets(nfts_response) {
+        let res = {};
+
+        nfts_response.forEach(asset => {
+            let asset_id = asset.asset_id;
+            let collection_name = asset.collection != undefined || asset.collection ? asset.collection.name : "";
+
+            let info = {
+                contract: asset.contract,
+                collection_name: collection_name,
+                name: asset.name,
+                template_id: asset.template != undefined ? asset.template.template_id : "",
+                rarity: collection_name == 'Alien Worlds' ? asset.data.rarity : ""
+            };
+
+            res[asset_id] = info;
+
+            if (!db.get_asset(asset_id)) {
+                db.add_asset(
+                    asset_id,
+                    info.name,
+                    info.rarity,
+                    info.contract,
+                    info.collection_name,
+                    info.template_id
+                );
+            };
+        });
+
+        return res
+    }
+
+    getURL(account) {
+        return [
+            this.URL.TOKENS.replace('%account%', account),
+            this.URL.NFTS.replace('%account%', account)
+        ]
     }
 }

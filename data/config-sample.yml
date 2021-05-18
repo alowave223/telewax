@@ -7,6 +7,13 @@ botToken:
 telegramUserId:
   123456789
 
+# Delay between account check, for better experience recommended to set this value to 0 on first run
+# Then set it to from 1 to 5 (values are seconds).
+timeout: 1
+
+# Bot will notificate you if new token added/removed to your wallet.
+tokenNotification: false
+
 # Your WAX accounts to parse. NOTICE you need to specify .wam account name (WAX Wallet)
 accounts:
   - example1.wam

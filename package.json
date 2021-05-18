@@ -26,6 +26,7 @@
     "axios": "^0.21.1",
     "better-sqlite3": "^7.4.0",
     "chalk": "^4.1.1",
+    "deep-equal": "^2.0.5",
     "telegraf": "^4.3.0",
     "yaml": "^1.10.2"
   }
