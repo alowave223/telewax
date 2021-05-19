@@ -1,6 +1,6 @@
 {
   "name": "telewax",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "An script for make your life with WAXP easier.",
   "main": "index.js",
   "scripts": {

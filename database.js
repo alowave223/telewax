@@ -52,4 +52,12 @@ function update_account(account, data, row) {
     }
 }
 
-module.exports = { init, add_account, add_asset, get_table, get_asset, update_account };
+function get_tokens(account) {
+    try {
+        return db.prepare(`SELECT tokens FROM accounts WHERE name = ?`).get([account]);
+    } catch (e) {
+        log('Error was occured while getting tokens from db:\n' + e, chalk.bgRed);
+    }
+}
+
+module.exports = { init, add_account, add_asset, get_table, get_asset, update_account, get_tokens };

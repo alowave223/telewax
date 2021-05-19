@@ -7,6 +7,7 @@ const chalk = require('chalk');
 const db = require('./database');
 const cluster = require('cluster');
 const equal = require('deep-equal');
+const process = require('process');
 
 if (!exists('./config.yml')) {
     // Weird, need fix.
@@ -33,6 +34,17 @@ if (cluster.isMaster) {
     log('=== Starting Up TeleWAX... ===', chalk.magentaBright);
 
     db.init();
+    let price_cache = {};
+
+    setInterval(async () => {
+        if (Object.keys(price_cache).length > 0) {
+            for (let i in price_cache) {
+                await sleep(1000);
+                let new_price = await wax.getPrice(i);
+                price_cache[i] = new_price;
+            }
+        }
+    }, 0x36EE80);
 
     const bot = new Telegraf(config.botToken);
     
@@ -40,11 +52,6 @@ if (cluster.isMaster) {
         ctx.telegram.leaveChat(ctx.message.chat.id);
     
         ctx.leaveChat();
-    });
-    
-    bot.command('test', async (ctx) => {
-        await bot.telegram.sendMessage(config.telegramUserId, 'lol!?');
-        await ctx.reply('lol');
     });
     
     bot.command('course', async (ctx) => {
@@ -121,12 +128,23 @@ if (cluster.isMaster) {
         });
 
         str += '\n';
+        let resourses = await wax.getRecources(wax.URL.RESOURCES, args[0]);
+
+        str += `CPU LOAD: ${resourses.cpu}% (${resourses.cpu_staked} WAX)\n`
+        str += `NET LOAD: ${resourses.net}% (${resourses.net_staked} WAX)\n`
+        str += `RAM LOAD: ${resourses.ram}% (${resourses.ram_bytes} bytes)\n\n`
+
+        str+= `NFTs:\n`
         assets_names = {};
 
         for (let i in account_assets) {
             let asset = account_assets[i];
 
             let parsed = await wax.fetchAsset(asset);
+
+            if (parsed == null)
+                parsed = await wax.fetchAsset(asset);
+
             if (!Object.keys(assets_names).includes(parsed.name)) {
                 assets_names[parsed.name] = {
                     count: 1,
@@ -141,16 +159,20 @@ if (cluster.isMaster) {
             let asset = assets_names[i];
             await sleep(config.timeout * 1000);
 
-            let price = await wax.getPrice(asset.info.template_id);
+            let price = price_cache[asset.info.template_id] != undefined ? 
+                price_cache[asset.info.template_id] : await wax.getPrice(asset.info.template_id);
+
+            price_cache[asset.info.template_id] = price;
 
             if (asset.count > 1) {
                 str += `${i} - ${asset.count} pcs. ${price} WAX (~${(price * asset.count).toFixed(2)} WAX)\n`;
+                total_rub += price * asset.count * wax_rub;
+                total_usd += price * asset.count * wax_usd;
             } else {
                 str += `${i} - ${asset.count} pcs. ${price} WAX\n`;
+                total_rub += price * wax_rub;
+                total_usd += price * wax_usd;
             }
-
-            total_rub += price * wax_rub;
-            total_usd += price * wax_usd;
         }
 
         str += 
@@ -158,6 +180,283 @@ if (cluster.isMaster) {
         `Account total USD price: ${total_usd.toFixed(2)} USD</b>`;
 
         await bot.telegram.sendMessage(config.telegramUserId, str,
+        {
+            parse_mode: 'HTML',
+            disable_web_page_preview: true
+        }
+        );
+    });
+
+    bot.command('total', async (ctx) => {
+        await ctx.reply('Loading... Wait 1-5 mins...');
+
+        let accounts_dump = db.get_table('accounts');
+        let total_rub = 0;
+        let total_usd = 0;
+
+        let all_tokens = {};
+        let all_assets = {};
+
+        let nft_total = 0;
+        accounts_dump.map(x => x.assets).map(x => JSON.parse(x)).forEach(x => {
+            nft_total += x.length;
+        });
+
+        let str = 
+        `<b>Accounts: ${accounts_dump.length}\n` +
+        `NFTs: ${nft_total}\n` +
+        `Tokens:\n`;
+
+        let [tlm_rub, tlm_usd] = await wax.getTokenPrice(wax.URL.GET_TLM_PRICE);
+        await sleep(config.timeout * 1000);
+        let [wax_rub, wax_usd] = await wax.getTokenPrice(wax.URL.GET_WAX_PRICE);
+
+        for (let i in accounts_dump) {
+            let account_dump = accounts_dump[i];
+
+            let account_assets = JSON.parse(account_dump.assets);
+            let account_tokens = JSON.parse(account_dump.tokens);
+
+            account_tokens.forEach(token => {
+                switch (token.symbol) {
+                    case 'TLM':
+                        if (!all_tokens[token.symbol]) {
+                            all_tokens[token.symbol] = token.amount;
+                        } else {
+                            all_tokens[token.symbol] += token.amount;
+                        }
+                        
+                        total_rub += token.amount * tlm_rub;
+                        total_usd += token.amount * tlm_usd;
+                        break
+                    case 'WAX':
+                        if (!all_tokens[token.symbol]) {
+                            all_tokens[token.symbol] = token.amount;
+                        } else {
+                            all_tokens[token.symbol] += token.amount;
+                        }
+    
+                        total_rub += token.amount * wax_rub;
+                        total_usd += token.amount * wax_usd;
+                        break
+                    case 'TOTAL_STAKED':
+                        if (!all_tokens[token.symbol]) {
+                            all_tokens[token.symbol] = token.amount;
+                        } else {
+                            all_tokens[token.symbol] += token.amount;
+                        }
+    
+                        total_rub += token.amount * wax_rub;
+                        total_usd += token.amount * wax_usd;
+                        break
+                    default:
+                        if (!all_tokens[token.symbol]) {
+                            all_tokens[token.symbol] = token.amount;
+                        } else {
+                            all_tokens[token.symbol] += token.amount;
+                        }
+                        break
+                }
+            });
+
+            for (let i in account_assets) {
+                let asset = account_assets[i];
+    
+                let parsed = await wax.fetchAsset(asset);
+
+                if (parsed == null)
+                    parsed = await wax.fetchAsset(asset);
+
+                if (!Object.keys(all_assets).includes(parsed.name)) {
+                    all_assets[parsed.name] = {
+                        count: 1,
+                        info: parsed
+                    }
+                } else {
+                    all_assets[parsed.name].count++;
+                }
+            }
+        }
+
+        for (let i in all_tokens) {
+            let token = all_tokens[i];
+
+            switch (i) {
+                case 'TLM':
+                    str += `TLM: ${token.toFixed(4)} (${(token * tlm_usd).toFixed(2)}$) (${(token * tlm_rub).toFixed(2)}₽)\n`;
+                    break
+                case 'WAX':
+                    str += `WAX: ${token.toFixed(4)} (${(token * wax_usd).toFixed(2)}$) (${(token * wax_rub).toFixed(2)}₽)\n`;
+                    break
+                case 'TOTAL_STAKED':
+                    str += `TOTAL_STAKED: ${token.toFixed(4)} (${(token * wax_usd).toFixed(2)}$) (${(token * wax_rub).toFixed(2)}₽)\n`;
+                    break
+                default:
+                    str += `${i}: ${token.toFixed(4)}\n`;
+                    break
+            }
+        }
+
+        str += '\n';
+
+        for (let i in all_assets) {
+            let asset = all_assets[i];
+            await sleep(config.timeout * 1000);
+
+            let price = price_cache[asset.info.template_id] != undefined ? 
+                price_cache[asset.info.template_id] : await wax.getPrice(asset.info.template_id);
+
+            price_cache[asset.info.template_id] = price;
+
+            if (asset.count > 1) {
+                str += `${i} - ${asset.count} pcs. ${price} WAX (~${(price * asset.count).toFixed(2)} WAX)\n`;
+                total_rub += price * asset.count * wax_rub;
+                total_usd += price * asset.count * wax_usd;
+            } else {
+                str += `${i} - ${asset.count} pcs. ${price} WAX\n`;
+                total_rub += price * wax_rub;
+                total_usd += price * wax_usd;
+            }
+        }
+
+        str += 
+        `\nAccounts total RUB price: ${total_rub.toFixed(2)} RUB\n` +
+        `Accounts total USD price: ${total_usd.toFixed(2)} USD</b>\n\n`;
+
+        str +=
+        `<b><a href=\"${wax.URL.COINGECKO_WAX_PAGE}\">WAX</a> -> USD: ${wax_usd}$</b>\n` +
+        `<b><a href=\"${wax.URL.COINGECKO_WAX_PAGE}\">WAX</a> -> RUB: ${wax_rub}₽</b>\n` +
+        `<b><a href=\"${wax.URL.COINGECKO_TLM_PAGE}\">TLM</a> -> USD: ${tlm_usd}$</b>\n` +
+        `<b><a href=\"${wax.URL.COINGECKO_TLM_PAGE}\">TLM</a> -> RUB: ${tlm_rub}₽</b>\n`;
+
+        await bot.telegram.sendMessage(config.telegramUserId, str,
+        {
+            parse_mode: 'HTML',
+            disable_web_page_preview: true
+        }
+        );
+    });
+
+    bot.command('accs', async (ctx) => {
+        let str = '';
+        let accounts_dump = db.get_table('accounts');
+
+        for (let i in accounts_dump) {
+            let account_dump = accounts_dump[i];
+            let account_tokens = JSON.parse(account_dump.tokens);
+
+            str += `[${parseInt(i) + 1}] <code>${account_dump.name}</code> | `
+
+            let wax = account_tokens.filter(x => x.symbol == 'WAX');
+            let tlm = account_tokens.filter(x => x.symbol == 'TLM');
+
+            wax.forEach(token => {
+                str += `${token.amount.toFixed(2)} WAX | `;
+            });
+
+            tlm.forEach(token => {
+                str += `${token.amount.toFixed(2)} TLM\n`;
+            });
+        }
+
+        await bot.telegram.sendMessage(config.telegramUserId, str,
+        {
+            parse_mode: 'HTML',
+            disable_web_page_preview: true
+        }
+        );
+    });
+
+    bot.command('info', async (ctx) => {
+        let accounts_dump = db.get_table('accounts');
+
+        let all_tokens = {};
+
+        let nft_total = 0;
+        accounts_dump.map(x => x.assets).map(x => JSON.parse(x)).forEach(x => {
+            nft_total += x.length;
+        });
+
+        let str = 
+        `<b>Accounts: ${accounts_dump.length}\n` +
+        `NFTs: ${nft_total}\n` +
+        `Tokens:\n`;
+
+        for (let i in accounts_dump) {
+            let account_dump = accounts_dump[i];
+            let account_tokens = JSON.parse(account_dump.tokens);
+
+            account_tokens.forEach(token => {
+                switch (token.symbol) {
+                    case 'TLM':
+                        if (!all_tokens[token.symbol]) {
+                            all_tokens[token.symbol] = token.amount;
+                        } else {
+                            all_tokens[token.symbol] += token.amount;
+                        }
+                        break
+                    case 'WAX':
+                        if (!all_tokens[token.symbol]) {
+                            all_tokens[token.symbol] = token.amount;
+                        } else {
+                            all_tokens[token.symbol] += token.amount;
+                        }
+                        break
+                    case 'TOTAL_STAKED':
+                        if (!all_tokens[token.symbol]) {
+                            all_tokens[token.symbol] = token.amount;
+                        } else {
+                            all_tokens[token.symbol] += token.amount;
+                        }
+                        break
+                    default:
+                        if (!all_tokens[token.symbol]) {
+                            all_tokens[token.symbol] = token.amount;
+                        } else {
+                            all_tokens[token.symbol] += token.amount;
+                        }
+                        break
+                }
+            });
+        }
+
+        for (let i in all_tokens) {
+            let token = all_tokens[i];
+
+            switch (i) {
+                case 'TLM':
+                    str += `TLM: ${token.toFixed(4)}\n`;
+                    break
+                case 'WAX':
+                    str += `WAX: ${token.toFixed(4)}\n`;
+                    break
+                case 'TOTAL_STAKED':
+                    str += `TOTAL_STAKED: ${token.toFixed(4)}\n`;
+                    break
+                default:
+                    str += `${i}: ${token.toFixed(4)}\n`;
+                    break
+            }
+        }
+
+        str += '</b>';
+
+        await bot.telegram.sendMessage(config.telegramUserId, str,
+        {
+            parse_mode: 'HTML',
+            disable_web_page_preview: true
+        }
+        );
+    });
+
+    bot.command('help', async (ctx) => {
+        await bot.telegram.sendMessage(config.telegramUserId, 
+        "/help - <b>List of commands.</b>\n" +
+        "/accs - <b>List of active accounts.</b>\n" +
+        "/course - <b>Current Listing prices of TLM & WAX.</b>\n" +
+        "/accstat [wallet] - <b>Information about specific account</b>\n" +
+        "/total - <b>Total information about all accounts.</b>\n" +
+        "/info - <b>Short info about all accounts.</b>",
         {
             parse_mode: 'HTML',
             disable_web_page_preview: true
@@ -183,17 +482,19 @@ if (cluster.isMaster) {
     process.once('SIGINT', () => {
         log('=== Shutting Down TeleWAX... ===', chalk.magentaBright);
         try {
-            worker.disconnect();  
+            process.kill(worker.process.pid, 0);  
         } catch (e) {}
         bot.stop('SIGINT');
+        process.exit(0);
     });
 
     process.once('SIGTERM', () => {
         log('=== Shutting Down TeleWAX... ===', chalk.magentaBright);
         try {
-            worker.disconnect();  
+            process.kill(worker.process.pid, 0);  
         } catch (e) {}
         bot.stop('SIGTERM');
+        process.exit(0);
     });
 } else {
     infLoop();
@@ -237,7 +538,7 @@ async function infLoop() {
         let [tokens, nfts] = wax.getURL(account);
 
         await sleep(config.timeout * 1000);
-        let tokens_response = await wax.getAccountTokens(tokens);
+        let tokens_response = await wax.getAccountTokens(tokens, account);
 
         await sleep(config.timeout * 1000);
         let resourses = await wax.getRecources(wax.URL.RESOURCES, account);
@@ -249,6 +550,10 @@ async function infLoop() {
 
         await sleep(config.timeout * 1000);
         let nfts_response = await wax.getAccountNfts(nfts);
+
+        if (nfts_response == null) {
+            nfts_response = await wax.getAccountNfts(nfts);
+        }
 
         await sleep(config.timeout * 1000);
         let assets = Object.keys(wax.getAssets(nfts_response));
@@ -343,6 +648,10 @@ async function infLoop() {
                     await sleep(config.timeout * 1000);
 
                     let parsed = await wax.fetchAsset(asset);
+
+                    if (parsed == null)
+                        parsed = await wax.fetchAsset(asset);
+
                     let price = await wax.getPrice(parsed.template_id);
 
                     str += 
@@ -373,6 +682,10 @@ async function infLoop() {
                     await sleep(config.timeout * 1000);
 
                     let parsed = await wax.fetchAsset(asset);
+
+                    if (parsed == null)
+                        parsed = await wax.fetchAsset(asset);
+
                     let price = await wax.getPrice(parsed.template_id);
 
                     str += 

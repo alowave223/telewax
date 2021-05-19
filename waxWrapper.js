@@ -40,7 +40,25 @@ module.exports = class waxWrapper {
     URL = URL;
     
     async getTokenPrice(URL) {
-        let response = await axios.get(URL);
+        let success = false;
+        let response;
+
+        for (let _ in [...Array(3).keys()]) {
+            try {
+                response = await axios.get(URL);
+                success = true;
+                break;
+            } catch (e) {
+                continue
+            }
+        }
+
+        if (success == false)
+            return [
+                0,
+                0
+            ]
+
         let data = response.data;
 
         return [
@@ -49,18 +67,48 @@ module.exports = class waxWrapper {
         ];
     }
 
-    async getAccountTokens(URL) {
-        let response = await axios.get(URL);
+    async getAccountTokens(URL, account) {
+        let success = false;
+        let response;
+
+        for (let _ in [...Array(3).keys()]) {
+            try {
+                response = await axios.get(URL);
+                success = true;
+                break;
+            } catch (e) {
+                continue
+            }
+        }
+
+        if (success == false)
+            return db.get_tokens(account);
+
         let data = response.data;
 
         return data.tokens;
     }
 
     async getAccountNfts(URL) {
-        let response = await axios.get(URL, {
-            headers: atomicassetsHeaders,
-            timeout: 10000
-        });
+        let success = false;
+        let response;
+
+        for (let _ in [...Array(3).keys()]) {
+            try {
+                response = await axios.get(URL, {
+                    headers: atomicassetsHeaders,
+                    timeout: 10000
+                });
+                success = true;
+                break;
+            } catch (e) {
+                continue
+            }
+        }
+
+        if (success == false)
+            return null;
+
         let data = response.data;
 
         return data.data;
@@ -154,10 +202,25 @@ module.exports = class waxWrapper {
         if (indb != undefined) {
             return indb;
         } else {
-            let asset_response = await axios.get(this.URL.ASSETS + asset_id, {
-                headers: atomicassetsHeaders,
-                timeout: 10000
-            });
+            let success = false;
+            let asset_response;
+    
+            for (let _ in [...Array(3).keys()]) {
+                try {
+                    asset_response = await axios.get(URL, {
+                        headers: atomicassetsHeaders,
+                        timeout: 10000
+                    });
+                    success = true;
+                    break;
+                } catch (e) {
+                    continue
+                }
+            }
+
+            if (success == false)
+                return null;
+
             let asset = asset_response.data.data;
 
             let collection_name = asset.collection != undefined || asset.collection ? asset.collection.name : "";
