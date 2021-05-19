@@ -543,6 +543,9 @@ async function infLoop() {
         await sleep(config.timeout * 1000);
         let resourses = await wax.getRecources(wax.URL.RESOURCES, account);
 
+        if (resourses == null)
+            resourses = await wax.getRecources(wax.URL.RESOURCES, account);
+
         tokens_response.push({
             symbol: 'TOTAL_STAKED',
             amount: resourses.total_staked

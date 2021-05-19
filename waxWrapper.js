@@ -115,11 +115,26 @@ module.exports = class waxWrapper {
     }
 
     async getRecources(URL, account) {
-        let response = await axios.get(URL, {
-            data: {
-                account_name: account
+        let success = false;
+        let response;
+
+        for (let _ in [...Array(3).keys()]) {
+            try {
+                response = await axios.get(URL, {
+                    data: {
+                        account_name: account
+                    }
+                });
+                success = true;
+                break;
+            } catch (e) {
+                continue
             }
-        });
+        }
+
+        if (success == false)
+            return null
+
         let data = response.data;
 
         let cpu = parseInt((data.cpu_limit.used / data.cpu_limit.max * 100).toFixed(2));
