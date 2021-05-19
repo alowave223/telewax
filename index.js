@@ -9,9 +9,16 @@ const cluster = require('cluster');
 const equal = require('deep-equal');
 
 if (!exists('./config.yml')) {
-    fs.writeFileSync('./config.yml', fs.readFileSync('./data/config-sample.yml', 'utf-8'), {
-        encoding: 'utf-8'
-    });
+    // Weird, need fix.
+    if (!exists('C:/snapshot/telewax/data/config-sample.yml')) {
+        fs.writeFileSync('./config.yml', fs.readFileSync('./data/config-sample.yml', 'utf-8'), {
+            encoding: 'utf-8'
+        });
+    } else {
+        fs.writeFileSync('./config.yml', fs.readFileSync('C:/snapshot/telewax/data/config-sample.yml', 'utf-8'), {
+            encoding: 'utf-8'
+        });
+    }
 
     log('Succesfully generated config.yml', chalk.yellow);
     log('Please, configure your TeleWAX before restarting this.', chalk.yellow);
@@ -354,7 +361,7 @@ async function infLoop() {
                 }
 
                 db.update_account(account, JSON.stringify(assets), 'assets');
-            } else if(deleted_assets.length) {
+            } else if (deleted_assets.length) {
                 let str =
                 `<b>Transfer/Remove NFTs:\n` +
                 `Account: <code>${account}</code></b>\n\n`;
@@ -386,9 +393,7 @@ async function infLoop() {
                 db.update_account(account, JSON.stringify(assets), 'assets');
             }
         }
-
-        if ((index + 1) == accounts.length) {
-            await infLoop();
-        }
     }
+
+    await infLoop();
 }

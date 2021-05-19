@@ -4,3 +4,4 @@ config.yml
 logs.log
 accounts.db
 .vscode/
+dist/

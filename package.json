@@ -1,6 +1,6 @@
 {
   "name": "telewax",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "An script for make your life with WAXP easier.",
   "main": "index.js",
   "scripts": {
@@ -16,6 +16,17 @@
     "waxp",
     "alienworlds"
   ],
+  "bin": "index.js",
+  "pkg": {
+    "targets": [
+      "node14-win-x64"
+    ],
+    "assets": [
+      "data/config-sample.yml",
+      "node_modules/es-get-iterator/node.js"
+    ],
+    "outputPath": "dist"
+  },
   "author": "alowave",
   "license": "MIT",
   "bugs": {
@@ -27,7 +38,11 @@
     "better-sqlite3": "^7.4.0",
     "chalk": "^4.1.1",
     "deep-equal": "^2.0.5",
+    "es-get-iterator": "^1.1.2",
     "telegraf": "^4.3.0",
     "yaml": "^1.10.2"
+  },
+  "devDependencies": {
+    "pkg": "4.3.6"
   }
 }
