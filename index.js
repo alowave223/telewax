@@ -27,7 +27,7 @@ if (!exists('./config.yml')) {
     return process.emit('SIGINT');
 }
 
-const config = YAML.parse(fs.readFileSync('./config.yml', 'utf-8'));
+let config = YAML.parse(fs.readFileSync('./config.yml', 'utf-8'));
 const wax = new WaxWrapper(config);
 
 if (cluster.isMaster) {
@@ -75,15 +75,15 @@ if (cluster.isMaster) {
         args.shift();
 
         if (!args[0]) {
-            return ctx.reply('Пиздуй нахуй')
+            return ctx.reply('You need to specify account.');
         } else if (!config.accounts.includes(args[0])) {
-            return ctx.reply('Нету такого акка дура')
+            return ctx.reply('There is no account like ' + args[0] + ' check your spellig.');
         }
 
         let accounts_dump = db.get_table('accounts');
         let account_dump = accounts_dump.find(x => x.name == args[0]);
         
-        if (!account_dump) return ctx.reply('Пососи дура');
+        if (!account_dump) return ctx.reply('There are no dump for that account, please wait.');
         await ctx.reply('Loading... Wait 1-5 mins...');
 
         let account_assets = JSON.parse(account_dump.assets);
@@ -449,6 +449,51 @@ if (cluster.isMaster) {
         );
     });
 
+    bot.command('contract', async (ctx) => {
+        let args = ctx.message.text.split(' ');
+        args.shift();
+
+        if (!args[0]) {
+            return ctx.reply('You need to specify account.')
+        } else if (!config.accounts.includes(args[0])) {
+            return ctx.reply('There is no account like ' + args[0] + ' check your spellig.')
+        }
+
+        let accounts_dump = db.get_table('accounts');
+        let account_dump = accounts_dump.find(x => x.name == args[0]);
+        
+        if (!account_dump) return ctx.reply('There are no dump for that account, please wait.');
+
+        let assets = JSON.parse(account_dump.assets);
+        let parsed = [];
+
+        for (let i in assets) {
+            parsed.push(
+                await wax.fetchAsset(assets[i])
+            );
+        }
+
+        let items = [];
+
+        for (let i in parsed) {
+            let asset = parsed[i];
+
+            if (items.length == 3)
+                break;
+
+            if (asset.name == "Standard Drill" || asset.name == "Standard Shovel") {
+                items.push(
+                    asset.asset_id.toString()
+                );
+            }
+        }
+
+        await ctx.reply(
+            `https://wax.bloks.io/account/m.federation?loadContract=true&tab=Actions&account=${args[0]}` + 
+            `&scope=m.federation&limit=100&action=setbag&items=${encodeURIComponent(JSON.stringify(items))}`
+        );
+    });
+
     bot.command('help', async (ctx) => {
         await bot.telegram.sendMessage(config.telegramUserId, 
         "/help - <b>List of commands.</b>\n" +
@@ -456,7 +501,8 @@ if (cluster.isMaster) {
         "/course - <b>Current Listing prices of TLM & WAX.</b>\n" +
         "/accstat [wallet] - <b>Information about specific account</b>\n" +
         "/total - <b>Total information about all accounts.</b>\n" +
-        "/info - <b>Short info about all accounts.</b>",
+        "/info - <b>Short info about all accounts.</b>\n" +
+        "/contract [wallet] - <b>Make contract link with first three Drills/Shovels.</b>\n",
         {
             parse_mode: 'HTML',
             disable_web_page_preview: true
@@ -518,6 +564,7 @@ function sleep(n) {
 }
 
 async function infLoop() {
+    config = YAML.parse(fs.readFileSync('./config.yml', 'utf-8'));
     let accounts = config.accounts;
     let accounts_dump = db.get_table('accounts');
 

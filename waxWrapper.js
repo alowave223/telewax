@@ -45,6 +45,7 @@ module.exports = class waxWrapper {
 
         for (let _ in [...Array(3).keys()]) {
             try {
+                await sleep(500);
                 response = await axios.get(URL);
                 success = true;
                 break;
@@ -71,8 +72,9 @@ module.exports = class waxWrapper {
         let success = false;
         let response;
 
-        for (let _ in [...Array(3).keys()]) {
+        for (let _ in [...Array(4).keys()]) {
             try {
+                await sleep(500);
                 response = await axios.get(URL);
                 success = true;
                 break;
@@ -82,7 +84,7 @@ module.exports = class waxWrapper {
         }
 
         if (success == false)
-            return db.get_tokens(account);
+            return JSON.parse(db.get_tokens(account));
 
         let data = response.data;
 
@@ -95,6 +97,7 @@ module.exports = class waxWrapper {
 
         for (let _ in [...Array(3).keys()]) {
             try {
+                await sleep(500);
                 response = await axios.get(URL, {
                     headers: atomicassetsHeaders,
                     timeout: 10000
@@ -120,6 +123,7 @@ module.exports = class waxWrapper {
 
         for (let _ in [...Array(3).keys()]) {
             try {
+                await sleep(500);
                 response = await axios.get(URL, {
                     data: {
                         account_name: account
@@ -145,7 +149,7 @@ module.exports = class waxWrapper {
         let net_staked;
         let total_staked;
 
-        if ("total_resources" in data) {
+        if (data.total_resources) {
             cpu_staked = parseFloat(parseFloat(data.total_resources.cpu_weight.substr(0, data.total_resources.cpu_weight.length - 5)).toFixed(2));
             net_staked = parseFloat(parseFloat(data.total_resources.net_weight.substr(0, data.total_resources.cpu_weight.length - 5)).toFixed(2));
             ram_bytes = data.total_resources.ram_bytes;
@@ -155,7 +159,7 @@ module.exports = class waxWrapper {
             ram_bytes = 0;
         }
 
-        if ("voter_info" in data) {
+        if (data.voter_info) {
             let before = data.voter_info.staked.toString().length > 8 ? data.voter_info.staked.toString().substr(0, data.voter_info.staked.toString().length - 8) : '0';
             let after = data.voter_info.staked.toString().substr(data.voter_info.staked.toString().length - 8, data.voter_info.staked.toString().length - 6);
             total_staked = parseFloat(before + '.' + after);
@@ -181,6 +185,7 @@ module.exports = class waxWrapper {
 
         for (let _ in [...Array(3).keys()]) {
             try {
+                await sleep(500);
                 response = await axios.get(this.URL.GET_PRICE, {
                     data: {
                         "state":"1",
@@ -222,6 +227,7 @@ module.exports = class waxWrapper {
     
             for (let _ in [...Array(3).keys()]) {
                 try {
+                    await sleep(500);
                     asset_response = await axios.get(URL, {
                         headers: atomicassetsHeaders,
                         timeout: 10000
@@ -300,4 +306,12 @@ module.exports = class waxWrapper {
             this.URL.NFTS.replace('%account%', account)
         ]
     }
+}
+
+function sleep(n) {
+    return new Promise(done => {
+      setTimeout(() => {
+        done();
+      }, n);
+    });
 }
