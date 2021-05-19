@@ -510,7 +510,7 @@ if (cluster.isMaster) {
         );
     });
     
-    await bot.launch();
+    bot.launch();
 
     log('Launched TeleWax, working...', chalk.greenBright);
 
