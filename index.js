@@ -510,7 +510,9 @@ if (cluster.isMaster) {
         );
     });
     
-    bot.launch();
+    await bot.launch();
+
+    log('Launched TeleWax, working...', chalk.greenBright);
 
     let worker = cluster.fork();
     
