@@ -23,7 +23,8 @@
     ],
     "assets": [
       "data/config-sample.yml",
-      "node_modules/es-get-iterator/node.js"
+      "node_modules/es-get-iterator/node.js",
+      "node_modules/better-sqlite3/"
     ],
     "outputPath": "dist"
   },
