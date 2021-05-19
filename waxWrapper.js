@@ -84,7 +84,7 @@ module.exports = class waxWrapper {
         }
 
         if (success == false)
-            return JSON.parse(db.get_tokens(account));
+            return JSON.parse(db.get_tokens(account).tokens);
 
         let data = response.data;
 
