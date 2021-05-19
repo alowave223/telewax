@@ -14,6 +14,9 @@ timeout: 1
 # Bot will notificate you if new token added/removed to your wallet.
 tokenNotification: false
 
+# Bot will notificate you if new NFT appear in your inventory.
+nftsNotification: false
+
 # Your WAX accounts to parse. NOTICE you need to specify .wam account name (WAX Wallet)
 accounts:
   - example1.wam

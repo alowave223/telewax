@@ -93,10 +93,9 @@ module.exports = class waxWrapper {
         }
 
         if ("voter_info" in data) {
-            let before = data.voter_info.staked.toString().length <= 9 ? data.voter_info.staked.toString().substr(0, data.voter_info.staked.toString().length - 8) : '0';
-            let after = data.voter_info.staked.toString().substr(data.voter_info.staked.toString().length - 8, data.voter_info.staked.length - 6);
+            let before = data.voter_info.staked.toString().length > 8 ? data.voter_info.staked.toString().substr(0, data.voter_info.staked.toString().length - 8) : '0';
+            let after = data.voter_info.staked.toString().substr(data.voter_info.staked.toString().length - 8, data.voter_info.staked.toString().length - 6);
             total_staked = parseFloat(before + '.' + after);
-            
         } else {
             total_staked = 0
         }
@@ -114,21 +113,36 @@ module.exports = class waxWrapper {
     }
 
     async getPrice(template_id) {
-        let response = await axios.get(this.URL.GET_PRICE, {
-            data: {
-                "state":"1",
-                "template_id": template_id.toString(),
-                "order": "asc",
-                "sort": "price",
-                "limit": "1",
-                "symbol": "WAX"
-            },
-            timeout: 10000
-        });
+        let success = false;
+        let response;
+
+        for (let _ in [...Array(3).keys()]) {
+            try {
+                response = await axios.get(this.URL.GET_PRICE, {
+                    data: {
+                        "state":"1",
+                        "template_id": template_id.toString(),
+                        "order": "asc",
+                        "sort": "price",
+                        "limit": "1",
+                        "symbol": "WAX"
+                    },
+                    timeout: 10000
+                });
+                success = true;
+                break
+            } catch (e) {
+                continue
+            }
+        }
+
+        if (success == false)
+            return 0;
+
         let data = response.data.data;
         let price = data[0].listing_price;
 
-        let before = price.length <= 9 ? price.substr(0, price.length - 8) : '0';
+        let before = price.length > 8 ? price.substr(0, price.length - 8) : '0';
         let after = price.substr(price.length - 8, price.length - 6);
 
         return parseFloat(before + '.' + after);
@@ -137,14 +151,14 @@ module.exports = class waxWrapper {
     async fetchAsset(asset_id) {
         let indb = db.get_asset(asset_id);
 
-        if (indb.length > 0) {
-            return indb[0];
+        if (indb != undefined) {
+            return indb;
         } else {
             let asset_response = await axios.get(this.URL.ASSETS + asset_id, {
                 headers: atomicassetsHeaders,
                 timeout: 10000
             });
-            let asset = asset_response.data;
+            let asset = asset_response.data.data;
 
             let collection_name = asset.collection != undefined || asset.collection ? asset.collection.name : "";
 

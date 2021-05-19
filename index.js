@@ -90,35 +90,72 @@ if (cluster.isMaster) {
         account_tokens.forEach(token => {
             switch (token.symbol) {
                 case 'TLM':
-                    str += `TLM: ${token.amount.toFixed(4)} (${token.amount * tlm_usd}$) (${token.amount * tlm_rub}₽)\n`;
+                    str += `TLM: ${token.amount.toFixed(4)} (${(token.amount * tlm_usd).toFixed(2)}$) (${(token.amount * tlm_rub).toFixed(2)}₽)\n`;
 
                     total_rub += token.amount * tlm_rub;
                     total_usd += token.amount * tlm_usd;
                     break
                 case 'WAX':
-                    str += `WAX: ${token.amount.toFixed(4)} (${token.amount * wax_usd}$) (${token.amount * wax_rub}₽)\n`;
+                    str += `WAX: ${token.amount.toFixed(4)} (${(token.amount * wax_usd).toFixed(2)}$) (${(token.amount * wax_rub).toFixed(2)}₽)\n`;
 
                     total_rub += token.amount * wax_rub;
                     total_usd += token.amount * wax_usd;
                     break
                 case 'TOTAL_STAKED':
-                    str += `TOTAL_STAKED: ${token.amount.toFixed(4)} (${token.amount * wax_usd}$) (${token.amount * wax_rub}₽)\n`;
+                    str += `TOTAL_STAKED: ${token.amount.toFixed(4)} (${(token.amount * wax_usd).toFixed(2)}$) (${(token.amount * wax_rub).toFixed(2)}₽)\n`;
 
                     total_rub += token.amount * wax_rub;
                     total_usd += token.amount * wax_usd;
                     break
                 default:
-                    str += `${token.symbol}: ${token.amount.toFixed(4)}`;
+                    str += `${token.symbol}: ${token.amount.toFixed(4)}\n`;
                     break
             }
         });
 
-        str += '\n\n';
+        str += '\n';
         assets_names = {};
 
-        account_assets.forEach(asset => {
-            
-        });
+        for (let i in account_assets) {
+            let asset = account_assets[i];
+
+            let parsed = await wax.fetchAsset(asset);
+            if (!Object.keys(assets_names).includes(parsed.name)) {
+                assets_names[parsed.name] = {
+                    count: 1,
+                    info: parsed
+                }
+            } else {
+                assets_names[parsed.name].count++;
+            }
+        }
+
+        for (let i in assets_names) {
+            let asset = assets_names[i];
+            await sleep(config.timeout * 1000);
+
+            let price = await wax.getPrice(asset.info.template_id);
+
+            if (asset.count > 1) {
+                str += `${i} - ${asset.count} pcs. ${price} WAX (~${(price * asset.count).toFixed(2)} WAX)\n`;
+            } else {
+                str += `${i} - ${asset.count} pcs. ${price} WAX\n`;
+            }
+
+            total_rub += price * wax_rub;
+            total_usd += price * wax_usd;
+        }
+
+        str += 
+        `\nAccount total RUB price: ${total_rub.toFixed(2)} RUB\n` +
+        `Account total USD price: ${total_usd.toFixed(2)} USD</b>`;
+
+        await bot.telegram.sendMessage(config.telegramUserId, str,
+        {
+            parse_mode: 'HTML',
+            disable_web_page_preview: true
+        }
+        );
     });
     
     bot.launch();
@@ -176,8 +213,9 @@ async function infLoop() {
     let accounts = config.accounts;
     let accounts_dump = db.get_table('accounts');
 
-    accounts.forEach(async (account, index) => {
-        await sleep(config.timeout * 1000);
+    for (let index in accounts) {
+        let account = accounts[index];
+
         let account_dump = accounts_dump.find(x => x.name == account);
 
         if (!account_dump) {
@@ -212,71 +250,145 @@ async function infLoop() {
         let isNewToken = false;
         let account_tokens = JSON.parse(account_dump.tokens);
         if (!equal(account_tokens, tokens_response)) {
-            tokens_response.forEach(token => {
-                sleep(config.timeout * 1000).then(e => {
-                    if (!account_tokens.find(x => x.symbol == token.symbol)) {
-                        if(config.tokenNotification) {
-                            process.send(
-                                '<b>New token deposit to your wallet:\n' +
-                                `Account: <code>${account}</code>\nToken: ${token.symbol} - ${token.amount.toFixed(4)}</b>`
-                            );
-                        }
-                        log(`New token deposit to your wallet ${account}: ${token.symbol} - ${token.amount.toFixed(4)}`, chalk.greenBright);
-    
-                        db.update_account(account, JSON.stringify(tokens_response), 'tokens');
-                        isNewToken = true;
+            for (let i in tokens_response) {
+                let token = tokens_response[i];
+
+                await sleep(config.timeout * 1000);
+
+                if (!account_tokens.find(x => x.symbol == token.symbol)) {
+                    if(config.tokenNotification) {
+                        process.send(
+                            '<b>New token deposit to your wallet:\n' +
+                            `Account: <code>${account}</code>\nToken: ${token.symbol} - ${token.amount.toFixed(4)}</b>`
+                        );
                     }
-                });
-            });
+                    log(`New token deposit to your wallet ${account}: ${token.symbol} - ${token.amount.toFixed(4)}`, chalk.greenBright);
+
+                    db.update_account(account, JSON.stringify(tokens_response), 'tokens');
+                    isNewToken = true;
+                }
+            }
 
             if (isNewToken == false) {
-                account_tokens.forEach((token, index) => {
-                    sleep(config.timeout * 1000).then(e => {
-                        let newToken = tokens_response.find(x => x.symbol == token.symbol);
-                        if (newToken.amount > token.amount) {
-                            let amountDiff = parseFloat(newToken.amount.toFixed(4)) - parseFloat(token.amount.toFixed(4));
-    
-                            if (amountDiff <= 0.0001 & newToken.symbol == 'TLM') {
-                                process.send(
-                                    `<b>Account: <code>${account}</code>\n` +
-                                    `+${amountDiff.toFixed(4)} TLM\n` +
-                                    `Seems like account was flagged...</b>`
-                                );
-                            } else {
-                                if(config.tokenNotification) {
-                                    process.send(
-                                        `<b>Account: <code>${account}</code>\n` +
-                                        `+${amountDiff.toFixed(4)} ${newToken.symbol} [${newToken.amount.toFixed(4)}]</b>`
-                                    );
-                                }
-                            }
-    
-                            account_tokens[index] = newToken;
-                            db.update_account(account, JSON.stringify(account_tokens), 'tokens');
-                            
-                            log(`Account ${account} added new funds: +${amountDiff.toFixed(4)} ${newToken.symbol} [${newToken.amount.toFixed(4)}]`, chalk.greenBright);
-                        } else if (newToken.amount < token.amount) {
-                            let amountDiff = parseFloat(token.amount.toFixed(4)) - parseFloat(newToken.amount.toFixed(4));
-    
+                for (let i in account_tokens) {
+                    let token = account_tokens[i];
+
+                    await sleep(config.timeout * 1000);
+
+                    let newToken = tokens_response.find(x => x.symbol == token.symbol);
+                    if (newToken.amount > token.amount) {
+                        let amountDiff = parseFloat(newToken.amount.toFixed(4)) - parseFloat(token.amount.toFixed(4));
+
+                        if (amountDiff <= 0.0001 & newToken.symbol == 'TLM') {
+                            process.send(
+                                `<b>Account: <code>${account}</code>\n` +
+                                `+${amountDiff.toFixed(4)} TLM\n` +
+                                `Seems like account was flagged...</b>`
+                            );
+                        } else {
                             if(config.tokenNotification) {
                                 process.send(
                                     `<b>Account: <code>${account}</code>\n` +
-                                    `-${amountDiff.toFixed(4)} ${newToken.symbol} [${newToken.amount.toFixed(4)}]</b>`
+                                    `+${amountDiff.toFixed(4)} ${newToken.symbol} [${newToken.amount.toFixed(4)}]</b>`
                                 );
                             }
-    
-                            account_tokens[index] = newToken;
-                            db.update_account(account, JSON.stringify(account_tokens), 'tokens');
-                            
-                            log(`Account ${account} removed/transfered funds: -${amountDiff.toFixed(4)} ${newToken.symbol} [${newToken.amount.toFixed(4)}]`, chalk.greenBright);   
                         }
-                    });
-                });
+
+                        account_tokens[i] = newToken;
+                        db.update_account(account, JSON.stringify(account_tokens), 'tokens');
+                        
+                        log(`Account ${account} added new funds: +${amountDiff.toFixed(4)} ${newToken.symbol} [${newToken.amount.toFixed(4)}]`, chalk.greenBright);
+                    } else if (newToken.amount < token.amount) {
+                        let amountDiff = parseFloat(token.amount.toFixed(4)) - parseFloat(newToken.amount.toFixed(4));
+
+                        if(config.tokenNotification) {
+                            process.send(
+                                `<b>Account: <code>${account}</code>\n` +
+                                `-${amountDiff.toFixed(4)} ${newToken.symbol} [${newToken.amount.toFixed(4)}]</b>`
+                            );
+                        }
+
+                        account_tokens[i] = newToken;
+                        db.update_account(account, JSON.stringify(account_tokens), 'tokens');
+                        
+                        log(`Account ${account} removed/transfered funds: -${amountDiff.toFixed(4)} ${newToken.symbol} [${newToken.amount.toFixed(4)}]`, chalk.greenBright);   
+                    }
+                }
             };
+        }
+
+        // NFTs notifications
+        let account_assets = JSON.parse(account_dump.assets);
+        if (!equal(account_assets, assets)) {
+            let new_assets = assets.filter(x => !account_assets.includes(x));
+            let deleted_assets = account_assets.filter(x => !assets.includes(x));
+
+            if (new_assets.length > 0) {
+                let str =
+                `<b>New NFTs:\n` +
+                `Account: <code>${account}</code></b>\n\n`;
+
+                let price_sum = 0;
+
+                for (let i in new_assets) {
+                    let asset = new_assets[i];
+
+                    await sleep(config.timeout * 1000);
+
+                    let parsed = await wax.fetchAsset(asset);
+                    let price = await wax.getPrice(parsed.template_id);
+
+                    str += 
+                    `<b>Asset: ${asset}\n` +
+                    `Name: ${parsed.name}\n` +
+                    `Rarity: ${parsed.rarity}\n` +
+                    `Price: ${price} WAX</b>\n\n`
+
+                    log(`New NFT on account ${account}: ID: ${asset} NAME: ${parsed.name} PRICE: ${price} WAX`, chalk.blueBright);
+                    price_sum += price;
+                }
+
+                if (config.nftsNotification) {
+                    str += `<b>+${price_sum.toFixed(2)} WAX</b>`
+                    process.send(str);
+                }
+
+                db.update_account(account, JSON.stringify(assets), 'assets');
+            } else if(deleted_assets.length) {
+                let str =
+                `<b>Transfer/Remove NFTs:\n` +
+                `Account: <code>${account}</code></b>\n\n`;
+
+                let price_sum = 0;
+                for (let i in deleted_assets) {
+                    let asset = deleted_assets[i];
+
+                    await sleep(config.timeout * 1000);
+
+                    let parsed = await wax.fetchAsset(asset);
+                    let price = await wax.getPrice(parsed.template_id);
+
+                    str += 
+                    `<b>Asset: ${asset}\n` +
+                    `Name: ${parsed.name}\n` +
+                    `Rarity: ${parsed.rarity}\n` +
+                    `Price: ${price} WAX</b>\n\n`
+
+                    log(`Removed/Transfered NFT on account ${account}: ID: ${asset} NAME: ${parsed.name} PRICE: ${price} WAX`, chalk.blueBright);
+                    price_sum += price;
+                }
+
+                if (config.nftsNotification) {
+                    str += `<b>-${price_sum.toFixed(2)} WAX</b>`
+                    process.send(str);
+                }
+
+                db.update_account(account, JSON.stringify(assets), 'assets');
+            }
         }
 
         if ((index + 1) == accounts.length) {
             await infLoop();
         }
-    });
+    }
 }
