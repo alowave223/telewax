@@ -197,14 +197,9 @@ if (cluster.isMaster) {
         let all_tokens = {};
         let all_assets = {};
 
-        let nft_total = 0;
-        accounts_dump.map(x => x.assets).map(x => JSON.parse(x)).forEach(x => {
-            nft_total += x.length;
-        });
-
         let str = 
         `<b>Accounts: ${accounts_dump.length}\n` +
-        `NFTs: ${nft_total}\n` +
+        `NFTs: ${accounts_dump.map(x => JSON.parse(x.assets)).flat().length}\n` +
         `Tokens:\n`;
 
         let [tlm_rub, tlm_usd] = await wax.getTokenPrice(wax.URL.GET_TLM_PRICE);
@@ -347,16 +342,10 @@ if (cluster.isMaster) {
 
             str += `[${parseInt(i) + 1}] <code>${account_dump.name}</code> | `
 
-            let wax = account_tokens.filter(x => x.symbol == 'WAX');
-            let tlm = account_tokens.filter(x => x.symbol == 'TLM');
-
-            wax.forEach(token => {
-                str += `${token.amount.toFixed(2)} WAX | `;
-            });
-
-            tlm.forEach(token => {
-                str += `${token.amount.toFixed(2)} TLM\n`;
-            });
+            let wax = account_tokens.find(x => x.symbol == 'WAX');
+            let tlm = account_tokens.find(x => x.symbol == 'TLM');
+            
+            str += `${wax.amount.toFixed(2)} WAX | ${tlm.amount.toFixed(2)} TLM\n`;
         }
 
         await bot.telegram.sendMessage(config.telegramUserId, str,
@@ -372,14 +361,9 @@ if (cluster.isMaster) {
 
         let all_tokens = {};
 
-        let nft_total = 0;
-        accounts_dump.map(x => x.assets).map(x => JSON.parse(x)).forEach(x => {
-            nft_total += x.length;
-        });
-
         let str = 
         `<b>Accounts: ${accounts_dump.length}\n` +
-        `NFTs: ${nft_total}\n` +
+        `NFTs: ${accounts_dump.map(x => JSON.parse(x.assets)).flat().length}\n` +
         `Tokens:\n`;
 
         for (let i in accounts_dump) {
